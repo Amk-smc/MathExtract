@@ -2,9 +2,6 @@
 
 > Extract math and science problems from textbook photos. Generate a clean, printable PDF with working space — ready to solve.
 
-![MathExtract Demo](./public/demo.png)
-<!-- Replace with a real screenshot when available -->
-
 ---
 
 ## What It Does
