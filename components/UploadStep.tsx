@@ -1,11 +1,19 @@
+/**
+ * components/UploadStep.tsx
+ *
+ * Step 1: layout preference (figure beside/below), image upload zone (JPG/PNG/WEBP, max 10MB),
+ * and "Detect Problems" button. Dispatches SET_FILE with layoutPreference and imageDataUrl,
+ * then SET_STEP to "detecting".
+ */
+
 "use client";
 
 import { useState, useCallback, useRef } from "react";
-import type { AppState, AppAction, InputType, LayoutPreference } from "@/lib/types";
+import type { AppState, AppAction, LayoutPreference } from "@/lib/types";
 import type { Dispatch } from "react";
 
-const ACCEPT_PHOTO = "image/jpeg,image/png,image/webp";
-const ACCEPT_PDF = "application/pdf";
+const ACCEPT_IMAGE = "image/jpeg,image/png,image/webp";
+const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -13,17 +21,11 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function getAcceptedTypes(inputType: InputType | null): string {
-  if (inputType === "photo") return ACCEPT_PHOTO;
-  if (inputType === "pdf") return ACCEPT_PDF;
-  return ACCEPT_PHOTO + "," + ACCEPT_PDF;
-}
-
-function validateFile(file: File, inputType: InputType): boolean {
-  if (inputType === "photo") {
-    return ["image/jpeg", "image/png", "image/webp"].includes(file.type);
-  }
-  return file.type === "application/pdf";
+function validateFile(file: File): boolean {
+  if (!["image/jpeg", "image/png", "image/webp"].includes(file.type))
+    return false;
+  if (file.size > MAX_SIZE_BYTES) return false;
+  return true;
 }
 
 type UploadStepProps = {
@@ -32,54 +34,25 @@ type UploadStepProps = {
 };
 
 export function UploadStep({ state, dispatch }: UploadStepProps) {
-  const [inputType, setInputType] = useState<InputType | null>(null);
-  const [layoutPreference, setLayoutPreference] = useState<LayoutPreference>("below");
+  const [layoutPreference, setLayoutPreference] =
+    useState<LayoutPreference>("below");
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const clearFile = useCallback(() => {
-    setFile(null);
+  const handleFile = useCallback((f: File) => {
+    if (!validateFile(f)) {
+      setFileError("Please upload a JPG, PNG, or WEBP image (max 10MB).");
+      return;
+    }
     setFileError(null);
-    setPreviewUrl(null);
+    setFile(f);
+    const reader = new FileReader();
+    reader.onload = () => setPreviewUrl(reader.result as string);
+    reader.readAsDataURL(f);
   }, []);
-
-  const handleFile = useCallback(
-    (f: File) => {
-      if (!inputType) {
-        setFileError("Choose an input type first.");
-        return;
-      }
-      if (!validateFile(f, inputType)) {
-        setFileError(
-          inputType === "photo"
-            ? "Please upload an image (JPEG, PNG, or WebP)."
-            : "Please upload a PDF file."
-        );
-        return;
-      }
-      setFileError(null);
-      setFile(f);
-
-      if (inputType === "photo") {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const dataUrl = reader.result as string;
-          setPreviewUrl(dataUrl);
-        };
-        reader.readAsDataURL(f);
-      } else {
-        if (previewUrl) {
-          URL.revokeObjectURL(previewUrl);
-          setPreviewUrl(null);
-        }
-        setPreviewUrl(null);
-      }
-    },
-    [inputType, previewUrl]
-  );
 
   const onDrop = useCallback(
     (e: React.DragEvent) => {
@@ -111,85 +84,24 @@ export function UploadStep({ state, dispatch }: UploadStepProps) {
   );
 
   const handleDetectProblems = useCallback(() => {
-    if (!inputType || !file) return;
-    let imageDataUrl: string | null = null;
-    if (inputType === "photo" && previewUrl) {
-      imageDataUrl = previewUrl;
-    }
+    if (!file || !previewUrl) return;
     dispatch({
       type: "SET_FILE",
-      payload: {
-        inputType,
-        layoutPreference,
-        imageDataUrl,
-      },
+      payload: { layoutPreference, imageDataUrl: previewUrl },
     });
     dispatch({ type: "SET_STEP", payload: "detecting" });
-  }, [inputType, layoutPreference, file, previewUrl, dispatch]);
+  }, [layoutPreference, file, previewUrl, dispatch]);
 
-  const canProceed = Boolean(inputType && file);
-  const accept = getAcceptedTypes(inputType);
+  const canProceed = Boolean(file && previewUrl);
 
   return (
-    <div className="rounded-xl border border-[#1e1e2a] bg-[#111118] p-8">
-      <h2 className="text-lg font-semibold text-zinc-100">Step 1: Upload</h2>
+    <div className="rounded-xl border border-gray-200 bg-white p-8 shadow-sm">
+      <h2 className="text-lg font-semibold text-gray-900">
+        Upload a photo of your textbook page
+      </h2>
 
-      {/* Action 1 — Input type */}
       <fieldset className="mt-6">
-        <legend className="text-sm font-medium text-zinc-400">Input type</legend>
-        <div className="mt-2 flex gap-4">
-          {(
-            [
-              {
-                value: "photo" as const,
-                label: "Photo / Scan",
-                desc: "A photo or scanned image of a textbook page",
-              },
-              {
-                value: "pdf" as const,
-                label: "PDF",
-                desc: "An existing PDF file",
-              },
-            ]
-          ).map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => {
-                setInputType(opt.value);
-                clearFile();
-              }}
-              className={`flex flex-1 flex-col items-start rounded-lg border-2 p-4 text-left transition ${
-                inputType === opt.value
-                  ? "border-indigo-500 bg-indigo-500/10 text-zinc-100"
-                  : "border-[#1e1e2a] bg-[#111118] text-zinc-300 hover:border-indigo-500/50"
-              }`}
-            >
-              <span className="flex w-full items-center justify-between">
-                <span className="font-medium">{opt.label}</span>
-                {inputType === opt.value && (
-                  <svg
-                    className="h-5 w-5 text-indigo-400"
-                    fill="currentColor"
-                    viewBox="0 0 20 20"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                )}
-              </span>
-              <span className="mt-1 text-sm text-zinc-500">{opt.desc}</span>
-            </button>
-          ))}
-        </div>
-      </fieldset>
-
-      {/* Action 2 — Layout preference */}
-      <fieldset className="mt-6">
-        <legend className="text-sm font-medium text-zinc-400">
+        <legend className="text-sm font-medium text-gray-500">
           Layout preference
         </legend>
         <div className="mt-2 flex gap-4">
@@ -203,8 +115,8 @@ export function UploadStep({ state, dispatch }: UploadStepProps) {
               key={opt.value}
               className={`flex flex-1 cursor-pointer items-center gap-3 rounded-lg border-2 p-4 transition ${
                 layoutPreference === opt.value
-                  ? "border-indigo-500/60 bg-indigo-500/10"
-                  : "border-[#1e1e2a] bg-[#111118] hover:border-indigo-500/50"
+                  ? "border-black bg-gray-50"
+                  : "border-gray-200 bg-white hover:border-gray-300"
               }`}
             >
               <input
@@ -213,9 +125,9 @@ export function UploadStep({ state, dispatch }: UploadStepProps) {
                 value={opt.value}
                 checked={layoutPreference === opt.value}
                 onChange={() => setLayoutPreference(opt.value)}
-                className="h-4 w-4 border-[#1e1e2a] bg-[#111118] text-indigo-500 focus:ring-indigo-500"
+                className="h-4 w-4 border-gray-300 text-black focus:ring-black"
               />
-              <span className="text-sm font-medium text-zinc-200">
+              <span className="text-sm font-medium text-gray-900">
                 {opt.label}
               </span>
             </label>
@@ -223,11 +135,11 @@ export function UploadStep({ state, dispatch }: UploadStepProps) {
         </div>
       </fieldset>
 
-      {/* Action 3 — Upload */}
       <fieldset className="mt-6">
-        <legend className="text-sm font-medium text-zinc-400">
-          Upload file
-        </legend>
+        <legend className="text-sm font-medium text-gray-500">Upload file</legend>
+        <p className="mt-1 text-xs text-gray-500">
+          Accepts JPG, PNG, WEBP — max 10MB
+        </p>
         <div
           onDrop={onDrop}
           onDragOver={onDragOver}
@@ -235,56 +147,35 @@ export function UploadStep({ state, dispatch }: UploadStepProps) {
           onClick={() => inputRef.current?.click()}
           className={`mt-2 flex min-h-[140px] cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 transition ${
             dragOver
-              ? "border-indigo-500 bg-indigo-500/10"
-              : "border-[#1e1e2a] bg-[#111118] hover:border-indigo-500/50"
+              ? "border-black bg-gray-50"
+              : "border-gray-200 bg-gray-50 hover:border-gray-300"
           }`}
         >
           <input
             ref={inputRef}
             type="file"
-            accept={accept}
+            accept={ACCEPT_IMAGE}
             onChange={onInputChange}
             className="hidden"
             aria-label="Choose file"
           />
           {!file ? (
             <>
-              <p className="text-sm text-zinc-400">
+              <p className="text-sm text-gray-600">
                 Drag and drop here or click to browse
-              </p>
-              <p className="mt-1 text-xs text-zinc-500">
-                {inputType === "photo" && "JPEG, PNG, WebP"}
-                {inputType === "pdf" && "PDF"}
-                {!inputType && "Choose an input type first"}
               </p>
             </>
           ) : (
             <div className="flex w-full flex-col items-center gap-3">
-              {inputType === "photo" && previewUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element -- base64 preview, not a static asset
-                <img
-                  src={previewUrl}
-                  alt="Preview"
-                  className="max-h-[200px] rounded-lg object-contain"
-                />
-              ) : inputType === "pdf" ? (
-                <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-[#1e1e2a]">
-                  <svg
-                    className="h-8 w-8 text-red-400"
-                    fill="currentColor"
-                    viewBox="0 0 20 20"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                </div>
-              ) : null}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={previewUrl!}
+                alt="Preview"
+                className="max-h-[200px] rounded-lg object-contain"
+              />
               <div className="text-center">
-                <p className="text-sm font-medium text-zinc-200">{file.name}</p>
-                <p className="text-xs text-zinc-500">
+                <p className="text-sm font-medium text-gray-900">{file.name}</p>
+                <p className="text-xs text-gray-500">
                   {formatFileSize(file.size)}
                 </p>
               </div>
@@ -292,16 +183,15 @@ export function UploadStep({ state, dispatch }: UploadStepProps) {
           )}
         </div>
         {fileError && (
-          <p className="mt-2 text-sm text-red-400">{fileError}</p>
+          <p className="mt-2 text-sm text-red-600">{fileError}</p>
         )}
       </fieldset>
 
-      {/* Proceed */}
       <button
         type="button"
         onClick={handleDetectProblems}
         disabled={!canProceed}
-        className="mt-8 w-full rounded-lg bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white transition-all hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-indigo-600"
+        className="mt-8 w-full rounded-lg bg-black px-6 py-2.5 text-sm font-semibold text-white transition-all hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-black"
       >
         Detect Problems
       </button>

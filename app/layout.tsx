@@ -1,3 +1,10 @@
+/**
+ * app/layout.tsx
+ *
+ * Root layout: wraps the app with HTML/body, loads DM Sans via next/font,
+ * and applies global CSS. All pages render as children.
+ */
+
 import type { Metadata } from "next";
 import { DM_Sans } from "next/font/google";
 import "./globals.css";

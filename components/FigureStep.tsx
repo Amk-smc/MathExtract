@@ -1,3 +1,11 @@
+/**
+ * components/FigureStep.tsx
+ *
+ * Step 3: flat list of all figure refs from all problems. Each can be cropped (opens LassoCrop),
+ * skipped, or re-cropped. Dispatches UPDATE_PROBLEM to store cropped image in problem.figureImages.
+ * "Generate PDF" dispatches SET_STEP to "generating" when all figures are done or skipped.
+ */
+
 "use client";
 
 import { useState } from "react";
@@ -83,15 +91,15 @@ export function FigureStep({ state, dispatch }: FigureStepProps) {
   const imageDataUrl = state.imageDataUrl;
 
   return (
-    <div className="rounded-xl border border-[#1e1e2a] bg-[#111118] p-8">
-      <h2 className="text-lg font-semibold text-zinc-100">Crop Figures</h2>
-      <p className="mt-1 text-sm text-zinc-400">
+    <div className="rounded-xl border border-gray-200 bg-white p-8 shadow-sm">
+      <h2 className="text-lg font-semibold text-gray-900">Crop Figures</h2>
+      <p className="mt-1 text-sm text-gray-500">
         {figureTasks.length === 0
           ? "No figure references to crop."
           : `${figureTasks.length} figure${figureTasks.length === 1 ? "" : "s"} to crop. Select a region for each or skip.`}
       </p>
       {figureTasks.length > 0 && (
-        <p className="mt-0.5 text-xs text-zinc-500">
+        <p className="mt-0.5 text-xs text-gray-500">
           {doneCount} of {figureTasks.length} figures cropped
         </p>
       )}
@@ -109,22 +117,22 @@ export function FigureStep({ state, dispatch }: FigureStepProps) {
           return (
             <div
               key={key}
-              className="rounded-lg border border-[#1e1e2a] bg-[#111118] p-4"
+              className="rounded-lg border border-gray-200 bg-white p-4"
             >
               <div className="flex flex-wrap items-center gap-2">
-                <span className="font-semibold text-zinc-100">
+                <span className="font-semibold text-gray-900">
                   {task.figureRef}
                 </span>
-                <span className="text-sm text-zinc-500">
+                <span className="text-sm text-gray-500">
                   from {task.problemLabel}
                 </span>
                 <span
                   className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
                     status === "done"
-                      ? "bg-emerald-500/20 text-emerald-400"
+                      ? "bg-green-100 text-green-700"
                       : status === "skipped"
-                        ? "bg-zinc-600 text-zinc-400"
-                        : "bg-amber-500/20 text-amber-400"
+                        ? "bg-gray-200 text-gray-600"
+                        : "bg-amber-100 text-amber-800"
                   }`}
                 >
                   {status === "done"
@@ -141,13 +149,13 @@ export function FigureStep({ state, dispatch }: FigureStepProps) {
                   <img
                     src={thumbnailUrl}
                     alt={task.figureRef}
-                    className="max-h-[100px] rounded border border-zinc-600 object-contain"
+                    className="max-h-[100px] rounded border border-gray-200 object-contain"
                   />
                   {imageDataUrl && (
                     <button
                       type="button"
                       onClick={() => handleReCrop(task)}
-                      className="text-sm font-medium text-blue-400 hover:text-blue-300"
+                      className="text-sm font-medium text-gray-900 hover:text-black"
                     >
                       Re-crop
                     </button>
@@ -157,36 +165,34 @@ export function FigureStep({ state, dispatch }: FigureStepProps) {
 
               {status === "pending" && (
                 <div className="mt-3 flex gap-2">
-                  {imageDataUrl && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setActiveCrop({
-                          problemId: task.problemId,
-                          figureRef: task.figureRef,
-                        })
-                      }
-                      className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-500"
-                    >
-                      Crop from image
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setActiveCrop({
+                        problemId: task.problemId,
+                        figureRef: task.figureRef,
+                      })
+                    }
+                    className="rounded-lg bg-black px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800"
+                  >
+                    Crop from image
+                  </button>
                   <button
                     type="button"
                     onClick={() => handleSkip(task)}
-                    className="rounded-lg border border-zinc-600 bg-zinc-800 px-3 py-1.5 text-sm font-medium text-zinc-300 hover:bg-zinc-700"
+                    className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
                   >
                     Skip
                   </button>
                 </div>
               )}
 
-              {status === "skipped" && imageDataUrl && (
+              {status === "skipped" && (
                 <div className="mt-3">
                   <button
                     type="button"
                     onClick={() => handleCropAnyway(task)}
-                    className="text-sm font-medium text-blue-400 hover:text-blue-300"
+                    className="text-sm font-medium text-gray-900 hover:text-black"
                   >
                     Crop anyway
                   </button>
@@ -194,7 +200,7 @@ export function FigureStep({ state, dispatch }: FigureStepProps) {
               )}
 
               {isActiveCrop && imageDataUrl && (
-                <div className="mt-4 rounded-lg border border-[#1e1e2a] bg-[#0f0f14] p-4">
+                <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-4">
                   <LassoCrop
                     imageDataUrl={imageDataUrl}
                     figureRef={task.figureRef}
@@ -217,8 +223,8 @@ export function FigureStep({ state, dispatch }: FigureStepProps) {
           disabled={!allResolved}
           className={`rounded-lg px-6 py-2.5 text-sm font-semibold transition-all ${
             allResolved
-              ? "bg-indigo-600 text-white hover:bg-indigo-500"
-              : "cursor-not-allowed bg-[#1e1e2a] text-slate-500"
+              ? "bg-black text-white hover:bg-gray-800"
+              : "cursor-not-allowed bg-gray-200 text-gray-400"
           }`}
         >
           Generate PDF →

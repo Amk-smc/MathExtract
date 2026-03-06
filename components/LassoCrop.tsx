@@ -1,3 +1,11 @@
+/**
+ * components/LassoCrop.tsx
+ *
+ * Reusable canvas crop tool: displays the image, user drags a rectangle to select a region.
+ * On "Confirm Crop", crops that region to an offscreen canvas and passes the result as a
+ * base64 data URL to onCrop. onCancel closes the tool without saving.
+ */
+
 "use client";
 
 import { useEffect, useRef, useState } from "react";
@@ -66,11 +74,11 @@ export function LassoCrop({
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(imgRef.current, 0, 0);
     if (r) {
-      ctx.strokeStyle = "#3b82f6";
+      ctx.strokeStyle = "#111827";
       ctx.lineWidth = 3;
       ctx.setLineDash([8, 4]);
       ctx.strokeRect(r.x, r.y, r.w, r.h);
-      ctx.fillStyle = "rgba(59,130,246,0.1)";
+      ctx.fillStyle = "rgba(0,0,0,0.05)";
       ctx.fillRect(r.x, r.y, r.w, r.h);
     }
   };
@@ -122,20 +130,20 @@ export function LassoCrop({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-gray-500">
           Crop{" "}
-          <span className="font-semibold text-blue-400">{figureRef}</span> —
+          <span className="font-semibold text-gray-900">{figureRef}</span> —
           click and drag to select
         </p>
         <button
           type="button"
           onClick={onCancel}
-          className="text-xs text-slate-500 underline hover:text-slate-300"
+          className="text-xs text-gray-500 underline hover:text-gray-900"
         >
           Cancel
         </button>
       </div>
-      <div className="max-h-[70vh] overflow-auto rounded-lg border border-slate-700">
+      <div className="max-h-[70vh] overflow-auto rounded-lg border border-gray-200">
         <canvas
           ref={canvasRef}
           className="block w-full cursor-crosshair"
@@ -156,8 +164,8 @@ export function LassoCrop({
         disabled={!rect}
         className={`w-full rounded-lg py-2 text-sm font-semibold transition-all ${
           rect
-            ? "bg-blue-600 text-white hover:bg-blue-500"
-            : "cursor-not-allowed bg-slate-800 text-slate-600"
+            ? "bg-black text-white hover:bg-gray-800"
+            : "cursor-not-allowed bg-gray-200 text-gray-400"
         }`}
       >
         Confirm Crop

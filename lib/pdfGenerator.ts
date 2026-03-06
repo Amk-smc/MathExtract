@@ -1,3 +1,12 @@
+/**
+ * lib/pdfGenerator.ts
+ *
+ * Builds a single A4 PDF from the problems list: title, then for each problem
+ * (label, text, figures with captions, blank space). Uses sanitizeForPDF to
+ * replace Unicode that jsPDF can't render in Helvetica. Returns a data URI string.
+ * Limits to 100 problems for safety.
+ */
+
 import jsPDF from "jspdf";
 import type { Problem, LayoutPreference } from "./types";
 
@@ -55,6 +64,8 @@ export async function generatePDF(
   options: GenerateOptions
 ): Promise<string> {
   const { problems, layoutPreference } = options;
+  // Limit to 100 problems max as a safety measure
+  const safeProblemList = problems.slice(0, 100);
   const doc = new jsPDF({ unit: "pt", format: "a4" });
 
   let y = MARGIN;
@@ -71,8 +82,8 @@ export async function generatePDF(
   y += 20;
 
   // ── Problems ───────────────────────────────────────────────────────────
-  for (let i = 0; i < problems.length; i++) {
-    const prob = problems[i];
+  for (let i = 0; i < safeProblemList.length; i++) {
+    const prob = safeProblemList[i];
 
     // Estimate space needed for this problem (sanitize first to avoid font fallback)
     doc.setFontSize(11);
@@ -180,7 +191,7 @@ export async function generatePDF(
     y += BLANK_SPACE + PROBLEM_GAP;
 
     // ── Divider between problems ───────────────────────────────────────
-    if (i < problems.length - 1) {
+    if (i < safeProblemList.length - 1) {
       doc.setDrawColor(230, 230, 230);
       doc.line(MARGIN, y - 12, PAGE_W - MARGIN, y - 12);
     }

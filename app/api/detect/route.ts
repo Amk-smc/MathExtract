@@ -1,3 +1,11 @@
+/**
+ * app/api/detect/route.ts
+ *
+ * POST /api/detect — Receives a base64-encoded image from the client, sends it
+ * to the Google Gemini API for math problem detection, and returns the raw
+ * text response (a JSON array of problems). The API key is kept server-side.
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 import {
   GoogleGenerativeAI,
@@ -5,13 +13,35 @@ import {
   HarmBlockThreshold,
 } from "@google/generative-ai";
 
+const ALLOWED_MEDIA_TYPES = ["image/jpeg", "image/png", "image/webp"];
+
 export async function POST(req: NextRequest) {
+  // Reject requests with body larger than 15MB (base64 of a ~10MB image)
+  const contentLength = req.headers.get("content-length");
+  if (contentLength && parseInt(contentLength, 10) > 15 * 1024 * 1024) {
+    return NextResponse.json({ error: "File too large." }, { status: 413 });
+  }
+
   try {
     const { imageBase64, mediaType } = await req.json();
 
     if (!imageBase64 || !mediaType) {
       return NextResponse.json(
         { error: "Missing imageBase64 or mediaType" },
+        { status: 400 }
+      );
+    }
+
+    if (typeof imageBase64 !== "string" || imageBase64.length === 0) {
+      return NextResponse.json(
+        { error: "Invalid image data." },
+        { status: 400 }
+      );
+    }
+
+    if (!ALLOWED_MEDIA_TYPES.includes(mediaType)) {
+      return NextResponse.json(
+        { error: "Invalid file type." },
         { status: 400 }
       );
     }
@@ -124,6 +154,10 @@ Rules:
       }
     }
 
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("Detection error:", err);
+    return NextResponse.json(
+      { error: "Detection failed. Please try again." },
+      { status: 500 }
+    );
   }
 }

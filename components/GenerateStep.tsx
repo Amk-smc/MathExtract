@@ -1,3 +1,11 @@
+/**
+ * components/GenerateStep.tsx
+ *
+ * Step 4: on mount runs generatePDF with current problems and layoutPreference. Shows spinner
+ * while building, then success card with download/preview links and "Extract another page"
+ * which dispatches RESET to return to upload.
+ */
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -40,23 +48,23 @@ export function GenerateStep({ state, dispatch }: GenerateStepProps) {
 
   if (generating) {
     return (
-      <div className="flex min-h-[400px] flex-col items-center justify-center gap-4 rounded-xl border border-[#1e1e2a] bg-[#111118] p-8">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-indigo-500 border-t-transparent" />
-        <p className="text-sm text-slate-400">Building your PDF...</p>
+      <div className="flex min-h-[400px] flex-col items-center justify-center gap-4 rounded-xl border border-gray-200 bg-white p-8 shadow-sm">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-black border-t-transparent" />
+        <p className="text-sm text-gray-500">Building your PDF...</p>
       </div>
     );
   }
 
   if (genError) {
     return (
-      <div className="flex flex-col items-center gap-4 rounded-xl border border-[#1e1e2a] bg-[#111118] py-12">
-        <p className="text-sm text-red-400">{genError}</p>
+      <div className="flex flex-col items-center gap-4 rounded-xl border border-gray-200 bg-white py-12 shadow-sm">
+        <p className="text-sm text-red-600">{genError}</p>
         <button
           type="button"
           onClick={() =>
             dispatch({ type: "SET_STEP", payload: "figures" })
           }
-          className="text-sm text-slate-400 underline hover:text-slate-200"
+          className="text-sm text-gray-500 underline hover:text-gray-900"
         >
           Go back
         </button>
@@ -71,14 +79,14 @@ export function GenerateStep({ state, dispatch }: GenerateStepProps) {
   );
 
   return (
-    <div className="flex flex-col items-center gap-5 rounded-xl border border-[#1e1e2a] bg-[#111118] p-8">
-      <div className="flex h-12 w-12 items-center justify-center rounded-full border border-indigo-500/30 bg-indigo-500/10">
+    <div className="flex flex-col items-center gap-5 rounded-xl border border-gray-200 bg-white p-8 shadow-sm">
+      <div className="flex h-12 w-12 items-center justify-center rounded-full border border-gray-300 bg-gray-100">
         <svg
           width="20"
           height="20"
           viewBox="0 0 24 24"
           fill="none"
-          stroke="#818cf8"
+          stroke="#111827"
           strokeWidth="2.5"
         >
           <path d="M20 6L9 17l-5-5" />
@@ -86,8 +94,8 @@ export function GenerateStep({ state, dispatch }: GenerateStepProps) {
       </div>
 
       <div className="text-center">
-        <h2 className="mb-1 text-lg font-semibold text-white">PDF Ready</h2>
-        <p className="text-sm text-slate-500">
+        <h2 className="mb-1 text-lg font-semibold text-gray-900">PDF Ready</h2>
+        <p className="text-sm text-gray-500">
           {totalProblems} problem{totalProblems !== 1 ? "s" : ""} &middot;{" "}
           {totalFigures} figure{totalFigures !== 1 ? "s" : ""} &middot; working
           space included
@@ -98,7 +106,7 @@ export function GenerateStep({ state, dispatch }: GenerateStepProps) {
         <a
           href={pdfDataUri}
           download="mathextract-problems.pdf"
-          className="flex items-center gap-2 rounded-lg bg-indigo-600 px-8 py-3 text-sm font-semibold text-white transition-all hover:bg-indigo-500"
+          className="flex items-center gap-2 rounded-lg bg-black px-8 py-3 text-sm font-semibold text-white transition-all hover:bg-gray-800"
         >
           <svg
             width="14"
@@ -119,17 +127,17 @@ export function GenerateStep({ state, dispatch }: GenerateStepProps) {
           href={pdfDataUri}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-sm text-slate-500 underline underline-offset-4 hover:text-slate-300"
+          className="text-sm text-gray-500 underline underline-offset-4 hover:text-gray-900"
         >
           Preview in browser
         </a>
       )}
 
-      <div className="mt-1 flex w-full flex-col items-center gap-2 border-t border-[#1e1e2a] pt-2">
+      <div className="mt-1 flex w-full flex-col items-center gap-2 border-t border-gray-200 pt-2">
         <button
           type="button"
           onClick={() => dispatch({ type: "RESET" })}
-          className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg px-6 py-2.5 text-sm font-medium text-slate-400 transition-all hover:bg-[#1a1a24] hover:text-white"
+          className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg px-6 py-2.5 text-sm font-medium text-gray-500 transition-all hover:bg-gray-100 hover:text-gray-900"
         >
           <svg
             width="13"
@@ -144,8 +152,8 @@ export function GenerateStep({ state, dispatch }: GenerateStepProps) {
           </svg>
           Extract another page
         </button>
-        <p className="text-xs text-slate-700">
-          Upload a new photo or PDF to generate another problem set
+        <p className="text-xs text-gray-500">
+          Upload a new photo to generate another problem set
         </p>
       </div>
     </div>

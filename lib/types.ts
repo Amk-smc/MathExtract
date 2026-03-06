@@ -1,4 +1,10 @@
-export type InputType = "photo" | "pdf";
+/**
+ * lib/types.ts
+ *
+ * Shared TypeScript types for the app: LayoutPreference, Problem, AppState, and
+ * all AppAction variants used by the reducer (SET_STEP, SET_FILE, SET_PROBLEMS, etc.).
+ */
+
 export type LayoutPreference = "beside" | "below";
 
 export type Problem = {
@@ -12,7 +18,6 @@ export type Problem = {
 
 export type AppState = {
   step: "upload" | "detecting" | "verify" | "figures" | "generating" | "done";
-  inputType: InputType | null;
   layoutPreference: LayoutPreference;
   imageDataUrl: string | null; // base64 of uploaded image for display + cropping
   problems: Problem[];
@@ -24,14 +29,11 @@ export type AppAction =
   | {
       type: "SET_FILE";
       payload: {
-        inputType: InputType;
         layoutPreference: LayoutPreference;
-        imageDataUrl: string | null;
+        imageDataUrl: string;
       };
     }
-  | { type: "SET_INPUT_TYPE"; payload: AppState["inputType"] }
-  | { type: "SET_LAYOUT"; payload: AppState["layoutPreference"] }
-  | { type: "SET_IMAGE"; payload: string | null }
+  | { type: "SET_LAYOUT"; payload: LayoutPreference }
   | { type: "SET_PROBLEMS"; payload: AppState["problems"] }
   | { type: "SET_ERROR"; payload: string | null }
   | { type: "UPDATE_PROBLEM"; payload: Problem }

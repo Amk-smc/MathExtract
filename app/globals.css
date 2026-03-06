@@ -1,27 +1,24 @@
+/**
+ * app/globals.css
+ *
+ * Tailwind directives plus base body styles (light background, DM Sans) and
+ * .dot-grid utility for the subtle page background pattern.
+ */
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 body {
-  background-color: #0c0c0f;
-  color: #e2e8f0;
+  background-color: #ffffff;
+  color: #111827;
+  font-family: "DM Sans", system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
-/* Subtle dot-grid background */
+/* Subtle dot grid for the page background */
 .dot-grid {
-  background-image: radial-gradient(circle, #2a2a35 1px, transparent 1px);
-  background-size: 28px 28px;
-}
-
-/* Vector lines decoration */
-.vector-lines {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  pointer-events: none;
-  overflow: hidden;
-  opacity: 0.04;
+  background-image: radial-gradient(circle, #e5e7eb 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-color: #f9fafb;
 }

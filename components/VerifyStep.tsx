@@ -1,3 +1,11 @@
+/**
+ * components/VerifyStep.tsx
+ *
+ * Step 2: list of detected problems with view/edit modes. User can edit label/text/figures,
+ * delete a problem, or add a new one. "Looks Good" dispatches SET_STEP to "figures" if any
+ * problem has figure refs, else to "generating". Uses UPDATE_PROBLEM, DELETE_PROBLEM, ADD_PROBLEM.
+ */
+
 "use client";
 
 import { useState } from "react";
@@ -95,11 +103,11 @@ export function VerifyStep({ state, dispatch }: VerifyStepProps) {
   };
 
   return (
-    <div className="rounded-xl border border-[#1e1e2a] bg-[#111118] p-8">
-      <h2 className="text-lg font-semibold text-zinc-100">
+    <div className="rounded-xl border border-gray-200 bg-white p-8 shadow-sm">
+      <h2 className="text-lg font-semibold text-gray-900">
         Verify Detected Problems
       </h2>
-      <p className="mt-1 text-sm text-zinc-400">
+      <p className="mt-1 text-sm text-gray-500">
         {count === 0
           ? "No problems detected. Add one manually or go back to upload a different image."
           : `${count} problem${count === 1 ? "" : "s"} found. Review and edit below.`}
@@ -107,7 +115,7 @@ export function VerifyStep({ state, dispatch }: VerifyStepProps) {
 
       <div className="mt-6 space-y-4">
         {problems.length === 0 && (
-          <div className="rounded-lg border border-dashed border-[#1e1e2a] bg-[#111118] p-8 text-center text-zinc-400">
+          <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 p-8 text-center text-gray-500">
             <p className="text-sm">No problems in the list yet.</p>
             <p className="mt-1 text-xs">Click &quot;+ Add Problem&quot; to add one manually.</p>
           </div>
@@ -118,52 +126,52 @@ export function VerifyStep({ state, dispatch }: VerifyStepProps) {
             key={p.id}
             className={`rounded-lg border-2 p-4 ${
               editingId === p.id
-                ? "border-indigo-500 bg-[#111118]"
-                : "border-[#1e1e2a] bg-[#111118]"
+                ? "border-black bg-white"
+                : "border-gray-200 bg-white"
             }`}
           >
             {editingId === p.id ? (
               <>
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-xs font-medium text-zinc-400">
+                    <label className="block text-xs font-medium text-gray-500">
                       Label
                     </label>
                     <input
                       type="text"
                       value={editLabel}
                       onChange={(e) => setEditLabel(e.target.value)}
-                      className="mt-1 w-full rounded border border-zinc-600 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      className="mt-1 w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
                       placeholder="e.g. Problem 1"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-zinc-400">
+                    <label className="block text-xs font-medium text-gray-500">
                       Text
                     </label>
                     <textarea
                       value={editText}
                       onChange={(e) => setEditText(e.target.value)}
                       rows={Math.max(3, editText.split("\n").length)}
-                      className="mt-1 min-h-[80px] w-full resize-y rounded border border-zinc-600 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      className="mt-1 min-h-[80px] w-full resize-y rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
                       placeholder="Problem text..."
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-zinc-400">
+                    <label className="block text-xs font-medium text-gray-500">
                       Figure references
                     </label>
                     <div className="mt-1 flex flex-wrap gap-2">
                       {editFigures.map((fig) => (
                         <span
                           key={fig}
-                          className="inline-flex items-center gap-1 rounded-full bg-zinc-700 px-2.5 py-0.5 text-xs text-zinc-200"
+                          className="inline-flex items-center gap-1 rounded-full bg-gray-200 px-2.5 py-0.5 text-xs text-gray-700"
                         >
                           {fig}
                           <button
                             type="button"
                             onClick={() => removeFigureInEdit(fig)}
-                            className="ml-0.5 rounded p-0.5 text-zinc-400 hover:bg-zinc-600 hover:text-zinc-200"
+                            className="ml-0.5 rounded p-0.5 text-gray-500 hover:bg-gray-300 hover:text-gray-900"
                             aria-label={`Remove ${fig}`}
                           >
                             ✕
@@ -178,13 +186,13 @@ export function VerifyStep({ state, dispatch }: VerifyStepProps) {
                           onKeyDown={(e) =>
                             e.key === "Enter" && (e.preventDefault(), addFigureInEdit())
                           }
-                          className="w-28 rounded border border-zinc-600 bg-zinc-900 px-2 py-1 text-xs text-zinc-100 placeholder-zinc-500 focus:border-blue-500 focus:outline-none"
+                          className="w-28 rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-900 placeholder-gray-400 focus:border-black focus:outline-none"
                           placeholder="e.g. Fig 2.6"
                         />
                         <button
                           type="button"
                           onClick={addFigureInEdit}
-                          className="rounded bg-zinc-600 px-2 py-1 text-xs text-zinc-200 hover:bg-zinc-500"
+                          className="rounded bg-gray-200 px-2 py-1 text-xs text-gray-700 hover:bg-gray-300"
                         >
                           Add
                         </button>
@@ -196,14 +204,14 @@ export function VerifyStep({ state, dispatch }: VerifyStepProps) {
                   <button
                     type="button"
                     onClick={saveEditing}
-                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500"
+                    className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
                   >
                     Save
                   </button>
                   <button
                     type="button"
                     onClick={cancelEditing}
-                    className="rounded-lg border border-zinc-600 bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-700"
+                    className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
                   >
                     Cancel
                   </button>
@@ -211,8 +219,8 @@ export function VerifyStep({ state, dispatch }: VerifyStepProps) {
               </>
             ) : (
               <>
-                <p className="font-semibold text-zinc-100">{p.label}</p>
-                <p className="mt-2 whitespace-pre-wrap text-sm text-zinc-300">
+                <p className="font-semibold text-gray-900">{p.label}</p>
+                <p className="mt-2 whitespace-pre-wrap text-sm text-gray-700">
                   {p.text || "(No text)"}
                 </p>
                 {p.figures.length > 0 && (
@@ -220,13 +228,13 @@ export function VerifyStep({ state, dispatch }: VerifyStepProps) {
                     {p.figures.map((fig) => (
                       <span
                         key={fig}
-                        className="inline-flex items-center gap-1 rounded-full bg-zinc-700 px-2.5 py-0.5 text-xs text-zinc-200"
+                        className="inline-flex items-center gap-1 rounded-full bg-gray-200 px-2.5 py-0.5 text-xs text-gray-700"
                       >
                         {fig}
                         <button
                           type="button"
                           onClick={() => removeFigure(p.id, fig)}
-                          className="rounded p-0.5 text-zinc-400 hover:bg-zinc-600 hover:text-zinc-200"
+                          className="rounded p-0.5 text-gray-500 hover:bg-gray-300 hover:text-gray-900"
                           aria-label={`Remove ${fig}`}
                         >
                           ✕
@@ -239,14 +247,14 @@ export function VerifyStep({ state, dispatch }: VerifyStepProps) {
                   <button
                     type="button"
                     onClick={() => startEditing(p)}
-                    className="text-sm font-medium text-blue-400 hover:text-blue-300"
+                    className="text-sm font-medium text-gray-900 hover:text-black"
                   >
                     Edit
                   </button>
                   <button
                     type="button"
                     onClick={() => dispatch({ type: "DELETE_PROBLEM", payload: p.id })}
-                    className="text-sm font-medium text-red-400 hover:text-red-300"
+                    className="text-sm font-medium text-red-600 hover:text-red-700"
                   >
                     Delete
                   </button>
@@ -261,14 +269,14 @@ export function VerifyStep({ state, dispatch }: VerifyStepProps) {
         <button
           type="button"
           onClick={handleAdd}
-          className="rounded-lg border-2 border-dashed border-[#1e1e2a] bg-[#111118] px-4 py-2 text-sm font-medium text-zinc-300 hover:border-indigo-500/50 hover:bg-[#1a1a24]"
+          className="rounded-lg border-2 border-dashed border-gray-200 bg-gray-50 px-4 py-2 text-sm font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-100"
         >
           + Add Problem
         </button>
         <button
           type="button"
           onClick={handleProceed}
-          className="rounded-lg bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white transition-all hover:bg-indigo-500"
+          className="rounded-lg bg-black px-6 py-2.5 text-sm font-semibold text-white transition-all hover:bg-gray-800"
         >
           Looks Good →
         </button>
