@@ -133,20 +133,20 @@ Return ONLY a valid JSON array. No explanation, no markdown, no code fences.
 Each item must follow this exact structure:
 {
   "id": "prob_1",
-  "label": "question number exactly as shown e.g. 2.68, Q2.1, (a)",
+  "label": "question number exactly as shown e.g. 2.51, Q2.1, (a)",
   "text": "full question text transcribed accurately",
-  "figures": ["Fig. P2.70"]
+  "figures": ["Fig. P2.62"]
 }
 
-Rules:
-- Copy question text EXACTLY as it appears — do not paraphrase or simplify
-- Preserve ALL mathematical notation exactly:
-  * Subscripts: write as vx, ax, t1, t2 (not "v sub x" or "v,")
-  * Superscripts/exponents: write as t^2, m/s^3 (not "t squared")
-  * Greek letters: write the symbol name: beta, alpha, omega, pi
-  * Fractions: write as a/b
-  * Multiplication: use * or just write adjacent (2t not "2 times t")
-- Keep all units exactly as written: m/s, m/s^2, kg, N
+CRITICAL NOTATION RULES — follow exactly:
+- Subscripts: write as plain letters ONCE. ax(t) NOT axx(t), vx NOT vxx
+- Superscripts/powers: use ^ symbol. t^2 NOT t² NOT t squared
+- Greek letters: write the NAME in plain English. beta NOT β, alpha NOT α, omega NOT ω, theta NOT θ, pi NOT π, mu NOT μ, Delta NOT Δ
+- Units: keep exactly as written. m/s^3, m/s^2, kg, N
+- Multiplication: write adjacent or use *. 2t or 2*t NOT 2×t
+- Do NOT use Unicode symbols, subscript Unicode chars, or special math characters
+- Do NOT add any characters not present in the original
+- Copy question text EXACTLY as it appears in the image
 - Include every question visible on the page
 - Only list figure references explicitly mentioned in the question text
 - If no problems found, return []`;

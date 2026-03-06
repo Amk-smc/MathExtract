@@ -239,7 +239,7 @@ export function FigureStep({ state, dispatch }: FigureStepProps) {
         <button
           type="button"
           onClick={() =>
-            dispatch({ type: "SET_STEP", payload: "generating" })
+            dispatch({ type: "SET_STEP", payload: "layout" })
           }
           disabled={!allResolved}
           className={`rounded-lg px-6 py-2.5 text-sm font-semibold transition-all ${

@@ -28,11 +28,12 @@ export type Problem = {
 };
 
 export type AppState = {
-  step: "upload" | "detecting" | "verify" | "figures" | "generating" | "done";
+  step: "upload" | "detecting" | "verify" | "figures" | "layout" | "generating" | "done";
   layoutPreference: LayoutPreference;
   pages: PageImage[];
-  imageDataUrl: string | null; // first page data URL for figure cropping (LassoCrop)
+  imageDataUrl: string | null;
   problems: Problem[];
+  pageBreaks: Set<string>; // problem IDs after which a forced page break occurs
   error: string | null;
 };
 
@@ -61,4 +62,6 @@ export type AppAction =
   | { type: "UPDATE_PROBLEM"; payload: Problem }
   | { type: "DELETE_PROBLEM"; payload: string }
   | { type: "ADD_PROBLEM"; payload: Problem }
+  | { type: "SET_PAGE_BREAKS"; payload: Set<string> }
+  | { type: "REORDER_PROBLEMS"; payload: Problem[] }
   | { type: "RESET" };

@@ -13,6 +13,7 @@ import type { Problem, LayoutPreference } from "./types";
 export type GenerateOptions = {
   problems: Problem[];
   layoutPreference: LayoutPreference;
+  pageBreaks?: Set<string>; // problem IDs after which a forced page break occurs
 };
 
 const PAGE_W = 595;
@@ -24,18 +25,24 @@ const BOTTOM = PAGE_H - MARGIN - FOOTER_H;
 
 /**
  * Converts Unicode characters to ASCII equivalents that jsPDF Helvetica can render.
- * Must be applied to ALL text before calling doc.text().
+ * Greek: global replace without \b (word boundary fails on Unicode). Must be applied to ALL text before doc.text().
  */
 function sanitizeForPDF(text: string): string {
   return text
-    .replace(/\bβ\b/g, "beta")
-    .replace(/\bα\b/g, "alpha")
-    .replace(/\bω\b/g, "omega")
-    .replace(/\bθ\b/g, "theta")
-    .replace(/\bΔ\b/g, "Delta")
-    .replace(/\bπ\b/g, "pi")
-    .replace(/\bμ\b/g, "mu")
-    .replace(/\bλ\b/g, "lambda")
+    .replace(/β/g, "beta")
+    .replace(/α/g, "alpha")
+    .replace(/ω/g, "omega")
+    .replace(/θ/g, "theta")
+    .replace(/Δ/g, "Delta")
+    .replace(/δ/g, "delta")
+    .replace(/π/g, "pi")
+    .replace(/μ/g, "mu")
+    .replace(/λ/g, "lambda")
+    .replace(/σ/g, "sigma")
+    .replace(/ρ/g, "rho")
+    .replace(/φ/g, "phi")
+    .replace(/γ/g, "gamma")
+    .replace(/ε/g, "epsilon")
     .replace(/²/g, "^2")
     .replace(/³/g, "^3")
     .replace(/ₓ/g, "x")
@@ -88,7 +95,7 @@ function addPageNumbers(doc: jsPDF): void {
 export async function generatePDF(
   options: GenerateOptions
 ): Promise<string> {
-  const { problems, layoutPreference } = options;
+  const { problems, layoutPreference, pageBreaks } = options;
   const list = problems.slice(0, 100);
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   let y = MARGIN;
@@ -264,6 +271,11 @@ export async function generatePDF(
       doc.setDrawColor(220, 220, 220);
       doc.line(MARGIN, y - 10, PAGE_W - MARGIN, y - 10);
       y += 10;
+    }
+
+    if (pageBreaks?.has(prob.id) && i < list.length - 1) {
+      doc.addPage();
+      y = MARGIN;
     }
   }
 

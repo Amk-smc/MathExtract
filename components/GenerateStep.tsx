@@ -32,6 +32,7 @@ export function GenerateStep({ state, dispatch }: GenerateStepProps) {
         const uri = await generatePDF({
           problems: state.problems,
           layoutPreference: state.layoutPreference,
+          pageBreaks: state.pageBreaks,
         });
         setPdfDataUri(uri);
       } catch (err: unknown) {

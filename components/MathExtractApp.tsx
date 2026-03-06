@@ -16,6 +16,7 @@ import type { Problem } from "@/lib/types";
 import { UploadStep } from "./UploadStep";
 import { VerifyStep } from "./VerifyStep";
 import { FigureStep } from "./FigureStep";
+import { LayoutStep } from "./LayoutStep";
 import { GenerateStep } from "./GenerateStep";
 
 const initialState: AppState = {
@@ -24,6 +25,7 @@ const initialState: AppState = {
   pages: [],
   imageDataUrl: null,
   problems: [],
+  pageBreaks: new Set<string>(),
   error: null,
 };
 
@@ -76,6 +78,10 @@ function reducer(state: AppState, action: AppAction): AppState {
         ...state,
         problems: [...state.problems, action.payload],
       };
+    case "SET_PAGE_BREAKS":
+      return { ...state, pageBreaks: action.payload };
+    case "REORDER_PROBLEMS":
+      return { ...state, problems: action.payload };
     case "RESET":
       return { ...initialState };
     default:
@@ -320,15 +326,25 @@ export function MathExtractApp() {
           </span>
         </div>
 
-        {state.step !== "generating" && (
+        {state.step !== "generating" && state.step !== "done" && (
           <div className="mb-8 flex items-center gap-0">
-            {(["upload", "verify", "figures"] as const).map((s, i) => {
+            {(
+              ["upload", "verify", "figures", "layout"] as const
+            ).map((s, i) => {
               const labels = {
                 upload: "Upload",
                 verify: "Verify",
                 figures: "Figures",
+                layout: "Layout",
               };
-              const order = ["upload", "detecting", "verify", "figures"];
+              const order = [
+                "upload",
+                "detecting",
+                "verify",
+                "figures",
+                "layout",
+                "generating",
+              ];
               const currentIndex = order.indexOf(state.step);
               const thisIndex = order.indexOf(s);
               const isDone = currentIndex > thisIndex;
@@ -362,7 +378,7 @@ export function MathExtractApp() {
                       {labels[s]}
                     </span>
                   </div>
-                  {i < 2 && (
+                  {i < 3 && (
                     <div
                       className={`mx-2 h-px w-8 ${
                         isDone ? "bg-black" : "bg-gray-200"
@@ -440,6 +456,9 @@ export function MathExtractApp() {
           )}
           {state.step === "figures" && (
             <FigureStep state={state} dispatch={dispatch} />
+          )}
+          {state.step === "layout" && (
+            <LayoutStep state={state} dispatch={dispatch} />
           )}
           {state.step === "generating" && (
             <GenerateStep state={state} dispatch={dispatch} />
