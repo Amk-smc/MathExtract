@@ -12,6 +12,28 @@ import { useState } from "react";
 import type { AppState, AppAction, Problem } from "@/lib/types";
 import type { Dispatch } from "react";
 
+/** Collapses 3+ consecutive newlines to max 2 for display. Does NOT trim — preserves Gemini leading/trailing whitespace. */
+function displayText(text: string): string {
+  return text.replace(/\n{3,}/g, "\n\n");
+}
+
+/** Formats math notation for browser display only. Does NOT affect stored state or PDF. Converts t^2→², beta→β, etc. */
+function formatMathForDisplay(text: string): string {
+  return text
+    .replace(/\^2/g, "²")
+    .replace(/\^3/g, "³")
+    .replace(/\bbeta\b/g, "β")
+    .replace(/\balpha\b/g, "α")
+    .replace(/\bomega\b/g, "ω")
+    .replace(/\btheta\b/g, "θ")
+    .replace(/\bdelta\b/g, "δ")
+    .replace(/\bDelta\b/g, "Δ")
+    .replace(/\bpi\b/g, "π")
+    .replace(/\bmu\b/g, "μ")
+    .replace(/\blambda\b/g, "λ")
+    .replace(/\n{3,}/g, "\n\n");
+}
+
 type VerifyStepProps = {
   state: AppState;
   dispatch: Dispatch<AppAction>;
@@ -45,7 +67,7 @@ export function VerifyStep({ state, dispatch }: VerifyStepProps) {
     const updated: Problem = {
       ...problems.find((x) => x.id === editingId)!,
       label: editLabel.trim() || "Problem",
-      text: editText.trim(),
+      text: editText, // do not trim — preserve Gemini formatting
       figures: editFigures.filter(Boolean),
     };
     dispatch({ type: "UPDATE_PROBLEM", payload: updated });
@@ -153,7 +175,7 @@ export function VerifyStep({ state, dispatch }: VerifyStepProps) {
                       value={editText}
                       onChange={(e) => setEditText(e.target.value)}
                       rows={Math.max(3, editText.split("\n").length)}
-                      className="mt-1 min-h-[80px] w-full resize-y rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
+                      className="mt-1 min-h-[80px] w-full resize-y rounded border border-gray-300 bg-white px-3 py-2 font-mono text-sm font-normal leading-relaxed text-gray-900 placeholder-gray-400 focus:border-black focus:outline-none focus:ring-1 focus:ring-black whitespace-pre-wrap"
                       placeholder="Problem text..."
                     />
                   </div>
@@ -219,9 +241,18 @@ export function VerifyStep({ state, dispatch }: VerifyStepProps) {
               </>
             ) : (
               <>
-                <p className="font-semibold text-gray-900">{p.label}</p>
-                <p className="mt-2 whitespace-pre-wrap text-sm text-gray-700">
-                  {p.text || "(No text)"}
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-semibold text-gray-900">
+                    {p.label}
+                  </span>
+                  {p.pageLabel && (
+                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-400">
+                      {p.pageLabel}
+                    </span>
+                  )}
+                </div>
+                <p className="mt-2 text-sm font-normal leading-relaxed text-gray-700 whitespace-pre-wrap break-words">
+                  {formatMathForDisplay(p.text || "(No text)")}
                 </p>
                 {p.figures.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-2">

@@ -10,7 +10,7 @@
 
 "use client";
 
-import { useReducer, useEffect, useCallback } from "react";
+import { useReducer, useEffect, useCallback, useRef } from "react";
 import type { AppState, AppAction } from "@/lib/types";
 import type { Problem } from "@/lib/types";
 import { UploadStep } from "./UploadStep";
@@ -30,7 +30,7 @@ const initialState: AppState = {
 function reducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
     case "SET_STEP":
-      return { ...state, step: action.payload };
+      return { ...state, step: action.payload, error: null };
     case "SET_FILE":
       return {
         ...state,
@@ -85,10 +85,13 @@ function reducer(state: AppState, action: AppAction): AppState {
 
 export function MathExtractApp() {
   const [state, dispatch] = useReducer(reducer, initialState);
+  const detectionRunning = useRef(false);
 
-  // Processes all pages sequentially: POST /api/detect per page, merges problems with unique IDs
-  const runDetection = useCallback(async () => {
-    if (state.pages.length === 0) {
+  // Accept pages as argument so this has no dependency on state.pages — prevents double-fire when pages update mid-detection.
+  const runDetection = useCallback(async (pages: AppState["pages"]) => {
+    console.log("[MathExtract] Starting detection for", pages.length, "page(s)");
+
+    if (pages.length === 0) {
       dispatch({
         type: "SET_ERROR",
         payload: "No images found. Please upload again.",
@@ -99,41 +102,144 @@ export function MathExtractApp() {
 
     const allProblems: Problem[] = [];
     let pageOffset = 0;
+    const pageErrors: string[] = [];
 
-    for (const page of state.pages) {
+    for (const page of pages) {
       dispatch({
         type: "UPDATE_PAGE_STATUS",
         payload: { id: page.id, status: "detecting" },
       });
 
       try {
-        const [header, base64] = page.dataUrl.split(",");
-        const mediaType = header.match(/:(.*?);/)?.[1] || "image/jpeg";
+        console.log(
+          "[MathExtract] Processing page:",
+          page.id,
+          "| dataUrl starts with:",
+          page.dataUrl?.substring(0, 50)
+        );
+
+        if (!page.dataUrl || !page.dataUrl.startsWith("data:")) {
+          throw new Error(`Page ${page.id} has invalid image data.`);
+        }
+
+        const commaIndex = page.dataUrl.indexOf(",");
+        if (commaIndex === -1) {
+          throw new Error(
+            `Page ${page.id} data URL is malformed — no comma found.`
+          );
+        }
+
+        const header = page.dataUrl.substring(0, commaIndex);
+        const base64 = page.dataUrl.substring(commaIndex + 1);
+        const mediaTypeMatch = header.match(/data:(.*?);/);
+        const mediaType = mediaTypeMatch?.[1] || "image/jpeg";
+
+        console.log(
+          "[MathExtract] mediaType:",
+          mediaType,
+          "| base64 length:",
+          base64.length
+        );
+
+        if (base64.length < 100) {
+          throw new Error(
+            `Page ${page.id} base64 data is too short — image may not have loaded correctly.`
+          );
+        }
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 60000);
 
         const res = await fetch("/api/detect", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ imageBase64: base64, mediaType }),
+          signal: controller.signal,
         });
 
+        clearTimeout(timeoutId);
+        console.log("[MathExtract] API response status:", res.status);
+
         const data = await res.json();
+
+        console.log(
+          "[MathExtract] Raw API response:",
+          data.text?.substring(0, 300)
+        );
+
         if (data.error) throw new Error(data.error);
 
-        if (typeof data.text !== "string" || data.text.length > 50000) {
-          throw new Error("Response too large to process.");
+        if (!data.text || data.text.trim().length === 0) {
+          throw new Error("Gemini returned an empty response.");
         }
 
-        const clean = data.text.replace(/```json|```/g, "").trim();
-        const parsed = JSON.parse(clean) as Array<{
+        const clean = data.text
+          .replace(/```json\s*/gi, "")
+          .replace(/```\s*/g, "")
+          .trim();
+
+        console.log(
+          "[MathExtract] Cleaned response (first 300 chars):",
+          clean.substring(0, 300)
+        );
+
+        const arrayStart = clean.indexOf("[");
+        const arrayEnd = clean.lastIndexOf("]");
+
+        if (arrayStart === -1 || arrayEnd === -1) {
+          console.warn(
+            "[MathExtract] No JSON array found in response. Full response:",
+            clean
+          );
+          throw new Error(
+            "Gemini did not return a valid list of problems. Try a clearer image."
+          );
+        }
+
+        const jsonString = clean.substring(arrayStart, arrayEnd + 1);
+
+        console.log(
+          "[MathExtract] Extracted JSON:",
+          jsonString.substring(0, 300)
+        );
+
+        let parsed: Array<{
           id: string;
           label: string;
           text: string;
           figures: string[];
         }>;
+        try {
+          parsed = JSON.parse(jsonString);
+        } catch (parseErr) {
+          console.error(
+            "[MathExtract] JSON parse failed:",
+            parseErr,
+            "| String was:",
+            jsonString
+          );
+          throw new Error(
+            "Could not parse AI response. The image may be unclear or contain no problems."
+          );
+        }
 
+        console.log(
+          "[MathExtract] Parsed",
+          parsed.length,
+          "problems from page",
+          page.id
+        );
+
+        if (!Array.isArray(parsed)) {
+          throw new Error("Unexpected response format from Gemini.");
+        }
+
+        const pageIndex = pages.indexOf(page) + 1;
         const pageProblems = parsed.map((p, i) => ({
           ...p,
           id: `${page.id}_prob_${i + pageOffset}`,
+          pageLabel: pages.length > 1 ? `Page ${pageIndex}` : undefined,
+          pageId: page.id,
           figureImages: {} as Record<string, string>,
           confirmed: false,
         }));
@@ -146,7 +252,14 @@ export function MathExtractApp() {
           payload: { id: page.id, status: "done" },
         });
       } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : "Unknown error";
+        const message =
+          err instanceof Error
+            ? err.name === "AbortError"
+              ? "Detection timed out. Try a smaller or clearer image."
+              : err.message
+            : "Unknown error";
+        console.error("[MathExtract] Page", page.id, "failed:", message);
+        pageErrors.push(message);
         dispatch({
           type: "UPDATE_PAGE_STATUS",
           payload: { id: page.id, status: "error", error: message },
@@ -154,11 +267,16 @@ export function MathExtractApp() {
       }
     }
 
+    console.log("[MathExtract] Total problems collected:", allProblems.length);
+
     if (allProblems.length === 0) {
+      const errorDetails = pageErrors.filter(Boolean).join(" | ");
+
       dispatch({
         type: "SET_ERROR",
-        payload:
-          "No problems detected across all pages. Please try again.",
+        payload: errorDetails
+          ? `Detection failed: ${errorDetails}`
+          : "No problems detected. Make sure the image is clear and contains math or science questions.",
       });
       dispatch({ type: "SET_STEP", payload: "upload" });
       return;
@@ -166,38 +284,20 @@ export function MathExtractApp() {
 
     dispatch({ type: "SET_PROBLEMS", payload: allProblems });
     dispatch({ type: "SET_STEP", payload: "verify" });
-  }, [state.pages]);
+  }, []);
+
 
   useEffect(() => {
-    if (state.step === "detecting") {
-      runDetection();
+    if (state.step === "detecting" && !detectionRunning.current) {
+      detectionRunning.current = true;
+      runDetection(state.pages).finally(() => {
+        detectionRunning.current = false;
+      });
     }
-  }, [state.step, runDetection]);
-
-  if (state.step === "detecting") {
-    const total = state.pages.length;
-    const done = state.pages.filter(
-      (p) => p.status === "done" || p.status === "error"
-    ).length;
-
-    return (
-      <div className="flex min-h-[400px] flex-col items-center justify-center gap-4">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-black border-t-transparent" />
-        <p className="text-sm font-medium text-gray-700">
-          Analyzing page {Math.min(done + 1, total)} of {total}...
-        </p>
-        <div className="h-1.5 w-48 overflow-hidden rounded-full bg-gray-100">
-          <div
-            className="h-full rounded-full bg-black transition-all duration-500"
-            style={{ width: `${total > 0 ? (done / total) * 100 : 0}%` }}
-          />
-        </div>
-        <p className="text-xs text-gray-500">
-          {done} of {total} pages complete
-        </p>
-      </div>
-    );
-  }
+    if (state.step !== "detecting") {
+      detectionRunning.current = false;
+    }
+  }, [state.step, state.pages, runDetection]);
 
   return (
     <div className="dot-grid min-h-screen">
@@ -276,8 +376,18 @@ export function MathExtractApp() {
         )}
 
         {state.error && (
-          <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {state.error}
+          <div className="mb-6 flex items-start justify-between gap-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+            <p className="text-sm leading-relaxed text-red-700">
+              {state.error}
+            </p>
+            <button
+              type="button"
+              onClick={() => dispatch({ type: "SET_ERROR", payload: null })}
+              className="ml-2 shrink-0 text-lg leading-none text-red-400 hover:text-red-600"
+              aria-label="Dismiss error"
+            >
+              ✕
+            </button>
           </div>
         )}
 
@@ -285,6 +395,46 @@ export function MathExtractApp() {
           {state.step === "upload" && (
             <UploadStep state={state} dispatch={dispatch} />
           )}
+
+          {state.step === "detecting" &&
+            (() => {
+              const total = state.pages.length;
+              const done = state.pages.filter(
+                (p) => p.status === "done"
+              ).length;
+              const errored = state.pages.filter(
+                (p) => p.status === "error"
+              );
+              const progress =
+                total > 0 ? ((done + errored.length) / total) * 100 : 0;
+              return (
+                <div className="flex min-h-[400px] flex-col items-center justify-center gap-4">
+                  <div className="h-8 w-8 animate-spin rounded-full border-2 border-black border-t-transparent" />
+                  <p className="text-sm font-medium text-gray-700">
+                    Analyzing page{" "}
+                    {Math.min(done + errored.length + 1, total)} of {total}...
+                  </p>
+                  <div className="h-1.5 w-48 overflow-hidden rounded-full bg-gray-100">
+                    <div
+                      className="h-full rounded-full bg-black transition-all duration-500"
+                      style={{ width: `${progress}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    {done} of {total} pages complete
+                  </p>
+                  {errored.map((p) => (
+                    <div
+                      key={p.id}
+                      className="w-full max-w-sm rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600"
+                    >
+                      Page error: {p.error ?? "Unknown error"}
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+
           {state.step === "verify" && (
             <VerifyStep state={state} dispatch={dispatch} />
           )}

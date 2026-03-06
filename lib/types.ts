@@ -23,6 +23,8 @@ export type Problem = {
   figures: string[]; // e.g. ["Fig 2.6", "Fig 3.1"]
   figureImages: Record<string, string>; // figureRef -> base64 data URL
   confirmed: boolean;
+  pageLabel?: string; // e.g. "Page 1" when from multi-page upload
+  pageId?: string; // matches PageImage.id for correct image lookup in FigureStep
 };
 
 export type AppState = {

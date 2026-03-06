@@ -1,10 +1,10 @@
 /**
  * lib/pdfGenerator.ts
  *
- * Builds a single A4 PDF from the problems list: title, then for each problem
- * (label, text, figures with captions, blank space). Uses sanitizeForPDF to
- * replace Unicode that jsPDF can't render in Helvetica. Returns a data URI string.
- * Limits to 100 problems for safety.
+ * Generates an A4 PDF from the problems list.
+ * Layout: title → per problem (label, text, figures, working space).
+ * Figures can be "below" (full width below text) or "beside" (right half, aligned to text top).
+ * Page numbers added in footer. sanitizeForPDF converts Unicode → ASCII for Helvetica.
  */
 
 import jsPDF from "jspdf";
@@ -15,166 +15,238 @@ export type GenerateOptions = {
   layoutPreference: LayoutPreference;
 };
 
-const PAGE_W = 595; // A4 pt
+const PAGE_W = 595;
 const PAGE_H = 842;
 const MARGIN = 50;
 const CONTENT_W = PAGE_W - MARGIN * 2;
-const BLANK_SPACE = 200; // generous blank area below each problem
-const PROBLEM_GAP = 24; // space between problems
+const FOOTER_H = 30;
+const BOTTOM = PAGE_H - MARGIN - FOOTER_H;
 
 /**
- * Replace Unicode characters that jsPDF cannot render in Helvetica.
- * These cause font fallback to Courier and line-width miscalculations.
+ * Converts Unicode characters to ASCII equivalents that jsPDF Helvetica can render.
+ * Must be applied to ALL text before calling doc.text().
  */
 function sanitizeForPDF(text: string): string {
   return text
-    .replace(/•/g, "-")
+    .replace(/\bβ\b/g, "beta")
+    .replace(/\bα\b/g, "alpha")
+    .replace(/\bω\b/g, "omega")
+    .replace(/\bθ\b/g, "theta")
+    .replace(/\bΔ\b/g, "Delta")
+    .replace(/\bπ\b/g, "pi")
+    .replace(/\bμ\b/g, "mu")
+    .replace(/\bλ\b/g, "lambda")
+    .replace(/²/g, "^2")
+    .replace(/³/g, "^3")
     .replace(/ₓ/g, "x")
     .replace(/₀/g, "0")
     .replace(/₁/g, "1")
     .replace(/₂/g, "2")
-    .replace(/₃/g, "3")
-    .replace(/ₙ/g, "n")
-    .replace(/²/g, "^2")
-    .replace(/³/g, "^3")
+    .replace(/[•·]/g, "-")
+    .replace(/[–—]/g, "-")
+    .replace(/[""]/g, '"')
+    .replace(/['']/g, "'")
     .replace(/≈/g, "~")
     .replace(/≠/g, "!=")
     .replace(/≤/g, "<=")
     .replace(/≥/g, ">=")
     .replace(/×/g, "x")
     .replace(/÷/g, "/")
-    .replace(/π/g, "pi")
     .replace(/∞/g, "inf")
     .replace(/√/g, "sqrt")
     .replace(/°/g, " deg")
-    .replace(/μ/g, "u")
-    .replace(/Δ/g, "delta ")
-    .replace(/θ/g, "theta")
-    .replace(/α/g, "alpha")
-    .replace(/β/g, "beta")
-    .replace(/ω/g, "omega")
-    .replace(/λ/g, "lambda")
-    .replace(/[""]/g, '"')
-    .replace(/['']/g, "'")
-    .replace(/[–—]/g, "-")
     .replace(/[^\x00-\x7F]/g, "?");
+}
+
+/** Loads image and returns natural dimensions for aspect ratio calculation. */
+function getImageDimensions(
+  dataUrl: string
+): Promise<{ w: number; h: number }> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () =>
+      resolve({ w: img.naturalWidth, h: img.naturalHeight });
+    img.onerror = () => resolve({ w: 1, h: 1 });
+    img.src = dataUrl;
+  });
+}
+
+/** Adds "Page N of M" footer to every page. Call after all content is added. */
+function addPageNumbers(doc: jsPDF): void {
+  const total = doc.getNumberOfPages();
+  for (let i = 1; i <= total; i++) {
+    doc.setPage(i);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(160, 160, 160);
+    doc.text(`Page ${i} of ${total}`, PAGE_W / 2, PAGE_H - 18, {
+      align: "center",
+    });
+  }
 }
 
 export async function generatePDF(
   options: GenerateOptions
 ): Promise<string> {
   const { problems, layoutPreference } = options;
-  // Limit to 100 problems max as a safety measure
-  const safeProblemList = problems.slice(0, 100);
+  const list = problems.slice(0, 100);
   const doc = new jsPDF({ unit: "pt", format: "a4" });
-
   let y = MARGIN;
 
-  // ── Title ──────────────────────────────────────────────────────────────
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(20);
+  doc.setFontSize(18);
   doc.setTextColor(20, 20, 20);
   doc.text("MathExtract — Problem Set", MARGIN, y);
-  y += 32;
+  y += 28;
 
   doc.setDrawColor(200, 200, 200);
   doc.line(MARGIN, y, PAGE_W - MARGIN, y);
-  y += 20;
+  y += 22;
 
-  // ── Problems ───────────────────────────────────────────────────────────
-  for (let i = 0; i < safeProblemList.length; i++) {
-    const prob = safeProblemList[i];
+  const LINE_H = 15;
 
-    // Estimate space needed for this problem (sanitize first to avoid font fallback)
+  for (let i = 0; i < list.length; i++) {
+    const prob = list[i];
+    const sanitizedLabel = sanitizeForPDF(prob.label || `Problem ${i + 1}`);
+    const sanitizedText = sanitizeForPDF(prob.text || "");
+
     doc.setFontSize(11);
-    const sanitizedTextEarly = sanitizeForPDF(prob.text || "");
-    const textLinesEarly = doc.splitTextToSize(
-      sanitizedTextEarly,
-      CONTENT_W - 10
+    const textLines = doc.splitTextToSize(sanitizedText, CONTENT_W - 8);
+    const textH = textLines.length * LINE_H;
+
+    const figEntries = Object.entries(prob.figureImages || {}).filter(
+      ([, v]) => !!v
     );
-    const textH = textLinesEarly.length * 15;
 
-    // Figure dimensions (if any cropped images)
-    const figEntries = Object.entries(prob.figureImages || {});
-    const figH = figEntries.length > 0 ? 160 : 0;
+    const figH = figEntries.length > 0 ? 180 : 0;
+    const contentH =
+      layoutPreference === "beside"
+        ? Math.max(textH, figH)
+        : textH + figH;
 
-    const totalNeeded =
-      24 + textH + figH + BLANK_SPACE + PROBLEM_GAP;
+    const subparts = (prob.text?.match(/\([a-z]\)/g) || []).length;
+    const workingSpace = Math.max(180, 60 + subparts * 60);
+    const totalNeeded = 26 + contentH + workingSpace + 30;
 
-    // Page break if needed
-    if (y + totalNeeded > PAGE_H - MARGIN) {
+    if (y + totalNeeded > BOTTOM) {
       doc.addPage();
       y = MARGIN;
     }
 
-    // ── Problem Label ──────────────────────────────────────────────────
+    const problemStartY = y;
+
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(13);
-    doc.setTextColor(30, 30, 30);
-    doc.text(
-      sanitizeForPDF(prob.label || `Problem ${i + 1}`),
-      MARGIN,
-      y
-    );
+    doc.setFontSize(12);
+    doc.setTextColor(20, 20, 20);
+    doc.text(sanitizedLabel, MARGIN, y);
     y += 20;
 
-    // ── Problem Text ───────────────────────────────────────────────────
+    const textWidth =
+      layoutPreference === "beside" && figEntries.length > 0
+        ? CONTENT_W * 0.52
+        : CONTENT_W - 8;
+
+    const finalTextLines = doc.splitTextToSize(sanitizedText, textWidth);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(11);
-    doc.setTextColor(60, 60, 60);
-    doc.text(textLinesEarly, MARGIN, y);
-    y += textH + 10;
+    doc.setTextColor(30, 30, 30);
+    doc.text(finalTextLines, MARGIN, y);
+    const actualTextH = finalTextLines.length * LINE_H;
+    y += actualTextH + 8;
 
-    // ── Figures ────────────────────────────────────────────────────────
     if (figEntries.length > 0) {
       for (const [figRef, imgData] of figEntries) {
         if (!imgData) continue;
 
-        // Figure caption
-        doc.setFont("helvetica", "italic");
-        doc.setFontSize(9);
-        doc.setTextColor(120, 120, 120);
-        doc.text(sanitizeForPDF(figRef), MARGIN, y);
-        y += 13;
+        const caption = sanitizeForPDF(`Figure: ${figRef}`);
 
         if (layoutPreference === "beside") {
-          // Two-column: text already printed, put image on right half
-          const imgX = MARGIN + CONTENT_W / 2 + 10;
-          const imgW = CONTENT_W / 2 - 10;
-          const imgH = 150;
+          const figX = MARGIN + CONTENT_W * 0.56;
+          const figMaxW = CONTENT_W * 0.42;
+          const figMaxH = 200;
 
-          // Check page space
-          if (y + imgH > PAGE_H - MARGIN) {
+          const dims = await getImageDimensions(imgData);
+          const ratio = dims.w / dims.h;
+          const dispH = Math.min(figMaxH, figMaxW / ratio);
+          const dispW = dispH * ratio;
+          const figY = problemStartY;
+
+          if (figY + dispH > BOTTOM) {
+            doc.addPage();
+            y = MARGIN;
+            doc.setFont("helvetica", "italic");
+            doc.setFontSize(8);
+            doc.setTextColor(120, 120, 120);
+            doc.text(caption, MARGIN, y);
+            y += 11;
+            try {
+              doc.addImage(
+                imgData,
+                "PNG",
+                MARGIN,
+                y,
+                dispW,
+                dispH,
+                undefined,
+                "FAST"
+              );
+            } catch {
+              /* skip */
+            }
+            y += dispH + 8;
+          } else {
+            doc.setFont("helvetica", "italic");
+            doc.setFontSize(8);
+            doc.setTextColor(120, 120, 120);
+            doc.text(caption, figX, figY - 1);
+            try {
+              doc.addImage(
+                imgData,
+                "PNG",
+                figX,
+                figY + 10,
+                dispW,
+                dispH,
+                undefined,
+                "FAST"
+              );
+            } catch {
+              /* skip */
+            }
+            y = Math.max(y, figY + 10 + dispH + 8);
+          }
+        } else {
+          const figMaxW = CONTENT_W * 0.85;
+          const figMaxH = 220;
+
+          const dims = await getImageDimensions(imgData);
+          const ratio = dims.w / dims.h;
+          const dispH = Math.min(figMaxH, figMaxW / ratio);
+          const dispW = dispH * ratio;
+
+          if (y + dispH + 20 > BOTTOM) {
             doc.addPage();
             y = MARGIN;
           }
+
+          doc.setFont("helvetica", "italic");
+          doc.setFontSize(8);
+          doc.setTextColor(120, 120, 120);
+          doc.text(caption, MARGIN, y);
+          y += 11;
 
           try {
             doc.addImage(
               imgData,
               "PNG",
-              imgX,
-              y - textH - 23,
-              imgW,
-              imgH
+              MARGIN,
+              y,
+              dispW,
+              dispH,
+              undefined,
+              "FAST"
             );
-          } catch {
-            // Image failed silently
-          }
-          y += 10; // small gap after figure row
-        } else {
-          // Below layout: image full width below text
-          const imgW = Math.min(CONTENT_W, 320);
-          const imgH = 150;
-
-          if (y + imgH > PAGE_H - MARGIN) {
-            doc.addPage();
-            y = MARGIN;
-          }
-
-          try {
-            doc.addImage(imgData, "PNG", MARGIN, y, imgW, imgH);
-            y += imgH + 10;
+            y += dispH + 10;
           } catch {
             y += 10;
           }
@@ -182,20 +254,19 @@ export async function generatePDF(
       }
     }
 
-    // ── Blank working area (no box, no label — just space) ─────────────────
-    if (y + BLANK_SPACE > PAGE_H - MARGIN) {
+    if (y + workingSpace > BOTTOM) {
       doc.addPage();
       y = MARGIN;
     }
+    y += workingSpace;
 
-    y += BLANK_SPACE + PROBLEM_GAP;
-
-    // ── Divider between problems ───────────────────────────────────────
-    if (i < safeProblemList.length - 1) {
-      doc.setDrawColor(230, 230, 230);
-      doc.line(MARGIN, y - 12, PAGE_W - MARGIN, y - 12);
+    if (i < list.length - 1) {
+      doc.setDrawColor(220, 220, 220);
+      doc.line(MARGIN, y - 10, PAGE_W - MARGIN, y - 10);
+      y += 10;
     }
   }
 
+  addPageNumbers(doc);
   return doc.output("datauristring");
 }

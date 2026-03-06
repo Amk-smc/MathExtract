@@ -4,6 +4,7 @@
  * POST /api/detect — Receives a base64-encoded image from the client, sends it
  * to the Google Gemini API for math problem detection, and returns the raw
  * text response (a JSON array of problems). The API key is kept server-side.
+ * Body is parsed once at the top so RECITATION retry can use the same payload.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -16,47 +17,80 @@ import {
 const ALLOWED_MEDIA_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 export async function POST(req: NextRequest) {
-  // Reject requests with body larger than 15MB (base64 of a ~10MB image)
   const contentLength = req.headers.get("content-length");
   if (contentLength && parseInt(contentLength, 10) > 15 * 1024 * 1024) {
     return NextResponse.json({ error: "File too large." }, { status: 413 });
   }
 
+  let imageBase64 = "";
+  let mediaType = "";
+
   try {
-    const { imageBase64, mediaType } = await req.json();
+    const body = await req.json();
+    imageBase64 = body.imageBase64 ?? "";
+    mediaType = body.mediaType ?? "";
+  } catch {
+    return NextResponse.json(
+      { error: "Invalid request body." },
+      { status: 400 }
+    );
+  }
 
-    if (!imageBase64 || !mediaType) {
-      return NextResponse.json(
-        { error: "Missing imageBase64 or mediaType" },
-        { status: 400 }
-      );
-    }
+  if (!imageBase64 || !mediaType) {
+    return NextResponse.json(
+      { error: "Missing imageBase64 or mediaType." },
+      { status: 400 }
+    );
+  }
+  if (typeof imageBase64 !== "string" || imageBase64.length === 0) {
+    return NextResponse.json(
+      { error: "Invalid image data." },
+      { status: 400 }
+    );
+  }
+  if (!ALLOWED_MEDIA_TYPES.includes(mediaType)) {
+    return NextResponse.json(
+      { error: "Invalid file type. Use JPG, PNG, or WEBP." },
+      { status: 400 }
+    );
+  }
 
-    if (typeof imageBase64 !== "string" || imageBase64.length === 0) {
-      return NextResponse.json(
-        { error: "Invalid image data." },
-        { status: 400 }
-      );
-    }
+  let cleanBase64 = imageBase64;
+  if (imageBase64.includes(",")) {
+    cleanBase64 = imageBase64.split(",")[1];
+  }
 
-    if (!ALLOWED_MEDIA_TYPES.includes(mediaType)) {
-      return NextResponse.json(
-        { error: "Invalid file type." },
-        { status: 400 }
-      );
-    }
+  if (!cleanBase64 || cleanBase64.length < 100) {
+    return NextResponse.json(
+      { error: "Image data is empty or too short." },
+      { status: 400 }
+    );
+  }
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: "GEMINI_API_KEY is not set" },
-        { status: 500 }
-      );
-    }
+  console.log(
+    "[API/detect] mediaType:",
+    mediaType,
+    "| base64 length:",
+    cleanBase64.length
+  );
 
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    return NextResponse.json(
+      { error: "GEMINI_API_KEY is not configured on the server." },
+      { status: 500 }
+    );
+  }
+
+  const genAI = new GoogleGenerativeAI(apiKey);
+
+  const buildModel = () =>
+    genAI.getGenerativeModel({
       model: "gemini-2.5-flash-lite",
+      generationConfig: {
+        maxOutputTokens: 8192,
+        temperature: 0.1,
+      },
       safetySettings: [
         {
           category: HarmCategory.HARM_CATEGORY_HARASSMENT,
@@ -77,84 +111,80 @@ export async function POST(req: NextRequest) {
       ],
     });
 
-    const prompt = `You are a precise text extractor for math and science textbook pages.
+  const callGemini = async (
+    prompt: string,
+    b64: string,
+    mime: string
+  ): Promise<string> => {
+    const model = buildModel();
+    const result = await model.generateContent([
+      { inlineData: { mimeType: mime, data: b64 } },
+      { text: prompt },
+    ]);
+    return result.response.text();
+  };
 
-Your job: extract every question or problem from the image exactly as written.
+  const mainPrompt = `You are a precise text extractor for math and science textbook pages.
+
+Extract every question or problem from the image exactly as written.
 
 Return ONLY a valid JSON array. No explanation, no markdown, no code fences.
 
 Each item must follow this exact structure:
 {
   "id": "prob_1",
-  "label": "the question number or label exactly as shown e.g. Q2.1, 1., (a)",
-  "text": "the full question text, transcribed accurately. Keep all variables, units, numbers, and phrasing intact. If a sentence refers to a figure (e.g. Fig. Q2.2), include that reference in the text exactly as written.",
-  "figures": ["Fig. Q2.2"]
+  "label": "question number exactly as shown e.g. 2.68, Q2.1, (a)",
+  "text": "full question text transcribed accurately",
+  "figures": ["Fig. P2.70"]
 }
 
 Rules:
-- Transcribe the question text as accurately as possible
-- Preserve all mathematical notation, variable names (vx, ax, t1, t2), units, and numbers exactly
+- Copy question text EXACTLY as it appears — do not paraphrase or simplify
+- Preserve ALL mathematical notation exactly:
+  * Subscripts: write as vx, ax, t1, t2 (not "v sub x" or "v,")
+  * Superscripts/exponents: write as t^2, m/s^3 (not "t squared")
+  * Greek letters: write the symbol name: beta, alpha, omega, pi
+  * Fractions: write as a/b
+  * Multiplication: use * or just write adjacent (2t not "2 times t")
+- Keep all units exactly as written: m/s, m/s^2, kg, N
 - Include every question visible on the page
-- Only list figure references that appear explicitly in the question text
+- Only list figure references explicitly mentioned in the question text
 - If no problems found, return []`;
 
-    const cleanData = imageBase64.replace(/^data:[^;]+;base64,/, "");
-    const result = await model.generateContent([
-      {
-        inlineData: {
-          mimeType: mediaType,
-          data: cleanData,
-        },
-      },
-      { text: prompt },
-    ]);
+  const retryPrompt = `List each question from this image as a JSON array:
+[{"id":"prob_1","label":"Q1","text":"question text","figures":[]}]
+Return only the JSON array, nothing else.`;
 
-    const text = result.response.text();
+  try {
+    const text = await callGemini(mainPrompt, cleanBase64, mediaType);
     return NextResponse.json({ text });
   } catch (err: unknown) {
-    console.error("Gemini API error:", err);
     const message = err instanceof Error ? err.message : "Unknown error";
+    console.error("[API/detect] Gemini error:", message);
 
     if (message.includes("RECITATION")) {
+      console.log("[API/detect] RECITATION — retrying with short prompt");
       try {
-        const { imageBase64: retryBase64, mediaType: retryMediaType } =
-          await req.clone().json();
-        const apiKey = process.env.GEMINI_API_KEY;
-        if (!apiKey) throw new Error("GEMINI_API_KEY is not set");
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({
-          model: "gemini-2.5-flash-lite",
-          safetySettings: [
-            { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-            { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-            { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-            { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-          ],
-        });
-        const retryPrompt = `List each question from this image as a JSON array: [{"id":"prob_1","label":"Q1","text":"question text","figures":[]}]. Return only the JSON array.`;
-        const retryResult = await model.generateContent([
-          {
-            inlineData: {
-              mimeType: retryMediaType,
-              data: String(retryBase64).replace(/^data:[^;]+;base64,/, ""),
-            },
-          },
-          { text: retryPrompt },
-        ]);
-        const retryText = retryResult.response.text();
+        const retryText = await callGemini(
+          retryPrompt,
+          cleanBase64,
+          mediaType
+        );
         return NextResponse.json({ text: retryText });
-      } catch {
+      } catch (retryErr: unknown) {
+        const retryMsg =
+          retryErr instanceof Error ? retryErr.message : "Unknown";
+        console.error("[API/detect] Retry failed:", retryMsg);
         return NextResponse.json(
           {
             error:
-              "Gemini blocked this image. Try cropping out the page header/title and re-uploading.",
+              "Gemini blocked this image. Try cropping out the page header and re-uploading.",
           },
           { status: 422 }
         );
       }
     }
 
-    console.error("Detection error:", err);
     return NextResponse.json(
       { error: "Detection failed. Please try again." },
       { status: 500 }

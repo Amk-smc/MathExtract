@@ -22,6 +22,8 @@ type FigureTask = {
   problemId: string;
   problemLabel: string;
   figureRef: string;
+  pageId: string | null;
+  pageLabel: string | null;
 };
 
 function taskKey(task: FigureTask): string {
@@ -40,8 +42,16 @@ export function FigureStep({ state, dispatch }: FigureStepProps) {
       problemId: p.id,
       problemLabel: p.label,
       figureRef: fig,
+      pageId: p.pageId ?? null,
+      pageLabel: p.pageLabel ?? null,
     }))
   );
+
+  const getImageForTask = (pageId: string | null): string | null => {
+    if (!pageId) return state.imageDataUrl;
+    const page = state.pages.find((p) => p.id === pageId);
+    return page?.dataUrl ?? state.imageDataUrl;
+  };
 
   const getStatus = (
     task: FigureTask
@@ -88,8 +98,6 @@ export function FigureStep({ state, dispatch }: FigureStepProps) {
     setActiveCrop({ problemId: task.problemId, figureRef: task.figureRef });
   };
 
-  const imageDataUrl = state.imageDataUrl;
-
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-8 shadow-sm">
       <h2 className="text-lg font-semibold text-gray-900">Crop Figures</h2>
@@ -123,9 +131,16 @@ export function FigureStep({ state, dispatch }: FigureStepProps) {
                 <span className="font-semibold text-gray-900">
                   {task.figureRef}
                 </span>
-                <span className="text-sm text-gray-500">
-                  from {task.problemLabel}
-                </span>
+                {task.problemLabel && (
+                  <span className="text-sm text-gray-500">
+                    from {task.problemLabel}
+                  </span>
+                )}
+                {task.pageLabel && (
+                  <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs text-blue-600">
+                    {task.pageLabel}
+                  </span>
+                )}
                 <span
                   className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
                     status === "done"
@@ -151,7 +166,7 @@ export function FigureStep({ state, dispatch }: FigureStepProps) {
                     alt={task.figureRef}
                     className="max-h-[100px] rounded border border-gray-200 object-contain"
                   />
-                  {imageDataUrl && (
+                  {getImageForTask(task.pageId) && (
                     <button
                       type="button"
                       onClick={() => handleReCrop(task)}
@@ -199,16 +214,22 @@ export function FigureStep({ state, dispatch }: FigureStepProps) {
                 </div>
               )}
 
-              {isActiveCrop && imageDataUrl && (
-                <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-4">
-                  <LassoCrop
-                    imageDataUrl={imageDataUrl}
-                    figureRef={task.figureRef}
-                    onCrop={handleCropDone}
-                    onCancel={() => setActiveCrop(null)}
-                  />
-                </div>
-              )}
+              {isActiveCrop &&
+                (getImageForTask(task.pageId) ? (
+                  <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-4">
+                    <LassoCrop
+                      imageDataUrl={getImageForTask(task.pageId)!}
+                      figureRef={task.figureRef}
+                      onCrop={handleCropDone}
+                      onCancel={() => setActiveCrop(null)}
+                    />
+                  </div>
+                ) : (
+                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                    Source image not available for this page. Please skip this
+                    figure.
+                  </div>
+                ))}
             </div>
           );
         })}

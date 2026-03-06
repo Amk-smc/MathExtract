@@ -57,17 +57,26 @@ export function GenerateStep({ state, dispatch }: GenerateStepProps) {
 
   if (genError) {
     return (
-      <div className="flex flex-col items-center gap-4 rounded-xl border border-gray-200 bg-white py-12 shadow-sm">
-        <p className="text-sm text-red-600">{genError}</p>
-        <button
-          type="button"
-          onClick={() =>
-            dispatch({ type: "SET_STEP", payload: "figures" })
-          }
-          className="text-sm text-gray-500 underline hover:text-gray-900"
-        >
-          Go back
-        </button>
+      <div className="flex flex-col items-center gap-4 rounded-xl border border-red-200 bg-red-50 p-6">
+        <p className="text-center text-sm text-red-700">{genError}</p>
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={() =>
+              dispatch({ type: "SET_STEP", payload: "figures" })
+            }
+            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-600 transition-all hover:text-gray-900"
+          >
+            ← Back to figures
+          </button>
+          <button
+            type="button"
+            onClick={() => dispatch({ type: "RESET" })}
+            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-600 transition-all hover:text-gray-900"
+          >
+            Start over
+          </button>
+        </div>
       </div>
     );
   }
