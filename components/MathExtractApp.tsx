@@ -1,10 +1,11 @@
 /**
  * components/MathExtractApp.tsx
  *
- * Main app shell: holds global state (step, layoutPreference, imageDataUrl,
- * problems, error) via useReducer, renders the step indicator and the
- * active step (Upload, Verify, Figures, or Generate). When step is
- * "detecting", runs the detection API and transitions to verify on success.
+ * Main app shell: holds global state (step, layoutPreference, pages, imageDataUrl,
+ * problems, error) via useReducer. When step is "detecting", runs the detection
+ * API once per page and merges all problems into one list, then transitions to
+ * verify. Renders the step indicator and active step (Upload, Verify, Figures,
+ * or Generate).
  */
 
 "use client";
@@ -20,6 +21,7 @@ import { GenerateStep } from "./GenerateStep";
 const initialState: AppState = {
   step: "upload",
   layoutPreference: "below",
+  pages: [],
   imageDataUrl: null,
   problems: [],
   error: null,
@@ -34,6 +36,22 @@ function reducer(state: AppState, action: AppAction): AppState {
         ...state,
         layoutPreference: action.payload.layoutPreference,
         imageDataUrl: action.payload.imageDataUrl,
+        pages: action.payload.pages,
+      };
+    case "SET_PAGES":
+      return { ...state, pages: action.payload };
+    case "UPDATE_PAGE_STATUS":
+      return {
+        ...state,
+        pages: state.pages.map((p) =>
+          p.id === action.payload.id
+            ? {
+                ...p,
+                status: action.payload.status,
+                error: action.payload.error,
+              }
+            : p
+        ),
       };
     case "SET_LAYOUT":
       return { ...state, layoutPreference: action.payload };
@@ -59,7 +77,7 @@ function reducer(state: AppState, action: AppAction): AppState {
         problems: [...state.problems, action.payload],
       };
     case "RESET":
-      return initialState;
+      return { ...initialState };
     default:
       return state;
   }
@@ -68,55 +86,87 @@ function reducer(state: AppState, action: AppAction): AppState {
 export function MathExtractApp() {
   const [state, dispatch] = useReducer(reducer, initialState);
 
-  // Calls POST /api/detect with base64 image and mediaType; expects { text } or { error }
+  // Processes all pages sequentially: POST /api/detect per page, merges problems with unique IDs
   const runDetection = useCallback(async () => {
-    if (!state.imageDataUrl) {
-      dispatch({ type: "SET_ERROR", payload: "No image found. Please upload again." });
+    if (state.pages.length === 0) {
+      dispatch({
+        type: "SET_ERROR",
+        payload: "No images found. Please upload again.",
+      });
       dispatch({ type: "SET_STEP", payload: "upload" });
       return;
     }
 
-    try {
-      const [header, base64] = state.imageDataUrl.split(",");
-      const mediaType = header.match(/:(.*?);/)?.[1] || "image/jpeg";
+    const allProblems: Problem[] = [];
+    let pageOffset = 0;
 
-      const res = await fetch("/api/detect", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageBase64: base64, mediaType }),
+    for (const page of state.pages) {
+      dispatch({
+        type: "UPDATE_PAGE_STATUS",
+        payload: { id: page.id, status: "detecting" },
       });
 
-      const data = await res.json();
+      try {
+        const [header, base64] = page.dataUrl.split(",");
+        const mediaType = header.match(/:(.*?);/)?.[1] || "image/jpeg";
 
-      if (data.error) throw new Error(data.error);
+        const res = await fetch("/api/detect", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imageBase64: base64, mediaType }),
+        });
 
-      // Sanity check: avoid parsing huge payloads that could freeze the client
-      if (typeof data.text !== "string" || data.text.length > 50000) {
-        throw new Error("Response too large to process.");
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+
+        if (typeof data.text !== "string" || data.text.length > 50000) {
+          throw new Error("Response too large to process.");
+        }
+
+        const clean = data.text.replace(/```json|```/g, "").trim();
+        const parsed = JSON.parse(clean) as Array<{
+          id: string;
+          label: string;
+          text: string;
+          figures: string[];
+        }>;
+
+        const pageProblems = parsed.map((p, i) => ({
+          ...p,
+          id: `${page.id}_prob_${i + pageOffset}`,
+          figureImages: {} as Record<string, string>,
+          confirmed: false,
+        }));
+
+        allProblems.push(...pageProblems);
+        pageOffset += parsed.length;
+
+        dispatch({
+          type: "UPDATE_PAGE_STATUS",
+          payload: { id: page.id, status: "done" },
+        });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Unknown error";
+        dispatch({
+          type: "UPDATE_PAGE_STATUS",
+          payload: { id: page.id, status: "error", error: message },
+        });
       }
-
-      const clean = data.text.replace(/```json|```/g, "").trim();
-      const parsed = JSON.parse(clean) as Array<{
-        id: string;
-        label: string;
-        text: string;
-        figures: string[];
-      }>;
-
-      const problems: Problem[] = parsed.map((p) => ({
-        ...p,
-        figureImages: {},
-        confirmed: false,
-      }));
-
-      dispatch({ type: "SET_PROBLEMS", payload: problems });
-      dispatch({ type: "SET_STEP", payload: "verify" });
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Unknown error";
-      dispatch({ type: "SET_ERROR", payload: "Detection failed: " + message });
-      dispatch({ type: "SET_STEP", payload: "upload" });
     }
-  }, [state.imageDataUrl]);
+
+    if (allProblems.length === 0) {
+      dispatch({
+        type: "SET_ERROR",
+        payload:
+          "No problems detected across all pages. Please try again.",
+      });
+      dispatch({ type: "SET_STEP", payload: "upload" });
+      return;
+    }
+
+    dispatch({ type: "SET_PROBLEMS", payload: allProblems });
+    dispatch({ type: "SET_STEP", payload: "verify" });
+  }, [state.pages]);
 
   useEffect(() => {
     if (state.step === "detecting") {
@@ -125,11 +175,25 @@ export function MathExtractApp() {
   }, [state.step, runDetection]);
 
   if (state.step === "detecting") {
+    const total = state.pages.length;
+    const done = state.pages.filter(
+      (p) => p.status === "done" || p.status === "error"
+    ).length;
+
     return (
       <div className="flex min-h-[400px] flex-col items-center justify-center gap-4">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-black border-t-transparent" />
-        <p className="text-sm text-gray-500">
-          Analyzing your page with Gemini...
+        <p className="text-sm font-medium text-gray-700">
+          Analyzing page {Math.min(done + 1, total)} of {total}...
+        </p>
+        <div className="h-1.5 w-48 overflow-hidden rounded-full bg-gray-100">
+          <div
+            className="h-full rounded-full bg-black transition-all duration-500"
+            style={{ width: `${total > 0 ? (done / total) * 100 : 0}%` }}
+          />
+        </div>
+        <p className="text-xs text-gray-500">
+          {done} of {total} pages complete
         </p>
       </div>
     );

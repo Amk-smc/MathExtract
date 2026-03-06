@@ -1,11 +1,20 @@
 /**
  * lib/types.ts
  *
- * Shared TypeScript types for the app: LayoutPreference, Problem, AppState, and
- * all AppAction variants used by the reducer (SET_STEP, SET_FILE, SET_PROBLEMS, etc.).
+ * Shared TypeScript types for the app: LayoutPreference, Problem, PageImage,
+ * AppState, and all AppAction variants used by the reducer.
  */
 
 export type LayoutPreference = "beside" | "below";
+
+/** One uploaded page (image) in the multi-page flow */
+export type PageImage = {
+  id: string;
+  dataUrl: string;
+  filename: string;
+  status: "pending" | "detecting" | "done" | "error";
+  error?: string;
+};
 
 export type Problem = {
   id: string;
@@ -19,7 +28,8 @@ export type Problem = {
 export type AppState = {
   step: "upload" | "detecting" | "verify" | "figures" | "generating" | "done";
   layoutPreference: LayoutPreference;
-  imageDataUrl: string | null; // base64 of uploaded image for display + cropping
+  pages: PageImage[];
+  imageDataUrl: string | null; // first page data URL for figure cropping (LassoCrop)
   problems: Problem[];
   error: string | null;
 };
@@ -30,7 +40,17 @@ export type AppAction =
       type: "SET_FILE";
       payload: {
         layoutPreference: LayoutPreference;
-        imageDataUrl: string;
+        imageDataUrl: string | null;
+        pages: PageImage[];
+      };
+    }
+  | { type: "SET_PAGES"; payload: PageImage[] }
+  | {
+      type: "UPDATE_PAGE_STATUS";
+      payload: {
+        id: string;
+        status: PageImage["status"];
+        error?: string;
       };
     }
   | { type: "SET_LAYOUT"; payload: LayoutPreference }
